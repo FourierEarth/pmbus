@@ -29,6 +29,7 @@ pub const SMBUS_MAX_BLOCK_SIZE: usize = 32;
 /// This trait currently does not handle Packet Error Correction.
 /// PEC can be implemented later with either a `const` boolean generic parameter,
 /// or with a Cargo feature.
+#[async_trait::async_trait(?Send)]
 pub trait SmBus<A: AddressMode = SevenBitAddress>: I2c<A> {
     /// 6.5.1, Pg. 38
     async fn quick_command(&mut self, address: A, bit: bool) -> Result<(), Self::Error> {
