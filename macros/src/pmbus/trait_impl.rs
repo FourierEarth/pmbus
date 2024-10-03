@@ -16,11 +16,11 @@ impl WriteCommandFn {
         } = entry;
 
         let create_fn_ident = || match (ident, write_kind) {
-            (CommandIdent::Verbatim(const_ident), CommandWrite::Write(_)) => {
+            (CommandIdent::Verbatim(const_ident), CommandWrite::Write(_, _, _)) => {
                 let base_ident = const_ident.to_string().to_snake_case();
                 Ident::new(&format!("write_{base_ident}"), const_ident.span())
             }
-            (CommandIdent::Verbatim(const_ident), CommandWrite::Send) => {
+            (CommandIdent::Verbatim(const_ident), CommandWrite::Send(_)) => {
                 let base_ident = const_ident.to_string().to_snake_case();
                 Ident::new(&format!("send_{base_ident}"), const_ident.span())
             }
@@ -30,7 +30,7 @@ impl WriteCommandFn {
         match (ident, write_kind, byte_count) {
             (
                 CommandIdent::Verbatim(command),
-                CommandWrite::Write(ty),
+                CommandWrite::Write(_, _, ty),
                 CommandByteCount::Count(_, 1),
             ) => {
                 let write_fn_ident = create_fn_ident();
@@ -42,7 +42,7 @@ impl WriteCommandFn {
             }
             (
                 CommandIdent::Verbatim(command),
-                CommandWrite::Write(ty),
+                CommandWrite::Write(_, _, ty),
                 CommandByteCount::Count(_, 2),
             ) => {
                 let write_fn_ident = create_fn_ident();
@@ -54,13 +54,13 @@ impl WriteCommandFn {
             }
             (
                 CommandIdent::Verbatim(command),
-                CommandWrite::Write(ty),
+                CommandWrite::Write(_, _, ty),
                 CommandByteCount::Count(_, _),
             )
             | (
                 CommandIdent::Verbatim(command),
-                CommandWrite::Write(ty),
-                CommandByteCount::Undefined,
+                CommandWrite::Write(_, _, ty),
+                CommandByteCount::Undefined(_),
             ) => {
                 let write_fn_ident = create_fn_ident();
                 Some(Self(parse_quote! {

@@ -15,7 +15,7 @@ pub fn impl_commands(input: TokenStream1) -> TokenStream1 {
     let mut const_tokens = TokenStream2::new();
     for entry in table.0.iter() {
         match &entry.ident {
-            CommandIdent::Undefined => continue,
+            CommandIdent::Undefined(_) => continue,
             CommandIdent::Verbatim(ident) => {
                 // Maybe it would have been better to just keep the `LitInt` around, because now we have to format it as hexadecimal again.
                 let byte = entry.byte.1;

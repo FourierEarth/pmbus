@@ -10,39 +10,32 @@ mod kw {
     syn::custom_keyword!(call);
 }
 
-// TODO: Preserve tokens/spans?
 pub enum CommandIdent {
-    // UNDEFINED / RESERVED∏
-    Undefined,
+    // UNDEFINED / RESERVED
+    Undefined(Token![_]),
     // CONSTANT IDENTIFIER
     Verbatim(Ident),
 }
 
 impl Parse for CommandIdent {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        // TODO: Started using lookahead for error handling, can't decide which way to go.
-        // Can use `ParseStream::peak` instead of `Lookahead::peek` instead as we aren't getting
-        // any benefits form the latter (without using its generated error).
-        let look = input.lookahead1();
-        if look.peek(Token![_]) {
-            input.parse::<Token![_]>().unwrap();
-            Ok(Self::Undefined)
+        if input.peek(Token![_]) {
+            input.parse().map(Self::Undefined)
         } else {
             input.parse().map(Self::Verbatim)
         }
     }
 }
 
-// TODO: Preserve tokens/spans?
 pub enum CommandWrite {
     // UNDEFINED / RESERVED
-    Undefined,
+    Undefined(Token![_]),
     // UNIMPLEMENTED / MANUFACTURER
-    Unimplemented,
+    Unimplemented(Token![!]),
     // WRITE TYPE
-    Write(Type),
+    Write(kw::write, Token![:], Type),
     // SEND COMMAND BIT
-    Send,
+    Send(kw::send),
 }
 
 impl Parse for CommandWrite {
@@ -50,37 +43,31 @@ impl Parse for CommandWrite {
         let look = input.lookahead1();
         if look.peek(Token![_]) {
             // UNDEFINED / RESERVED
-            input.parse::<Token![_]>().unwrap();
-            Ok(Self::Undefined)
+            input.parse().map(Self::Undefined)
         } else if look.peek(Token![!]) {
             // UNIMPLEMENTED / MANUFACTURER
-            input.parse::<Token![!]>().unwrap();
-            Ok(Self::Unimplemented)
+            input.parse().map(Self::Unimplemented)
         } else if look.peek(kw::write) {
             // WRITE TYPE
-            input.parse::<kw::write>().unwrap();
-            input.parse::<Token![:]>()?;
-            input.parse::<Type>().map(Self::Write)
+            Ok(Self::Write(input.parse()?, input.parse()?, input.parse()?))
         } else if look.peek(kw::send) {
             // SEND COMMAND BIT
-            input.parse::<kw::send>().unwrap();
-            Ok(Self::Send)
+            input.parse().map(Self::Send)
         } else {
             Err(look.error())
         }
     }
 }
 
-// TODO: Preserve tokens/spans?
 pub enum CommandRead {
     // UNDEFINED / RESERVED
-    Undefined,
+    Undefined(Token![_]),
     // UNIMPLEMENTED / MANUFACTURER
-    Unimplemented,
+    Unimplemented(Token![!]),
     // READ TYPE
-    Read(Type),
+    Read(kw::read, Token![:], Type),
     // PROCEDURE CALL TYPE
-    Call(Type),
+    Call(kw::call, Token![:], Type),
 }
 
 impl Parse for CommandRead {
@@ -88,22 +75,16 @@ impl Parse for CommandRead {
         let look = input.lookahead1();
         if look.peek(Token![_]) {
             // UNDEFINED / RESERVED
-            input.parse::<Token![_]>().unwrap();
-            Ok(Self::Undefined)
+            input.parse().map(Self::Undefined)
         } else if look.peek(Token![!]) {
             // UNIMPLEMENTED / MANUFACTURER
-            input.parse::<Token![!]>().unwrap();
-            Ok(Self::Unimplemented)
+            input.parse().map(Self::Unimplemented)
         } else if look.peek(kw::read) {
             // READ TYPE
-            input.parse::<kw::read>().unwrap();
-            input.parse::<Token![:]>()?;
-            input.parse::<Type>().map(Self::Read)
+            Ok(Self::Read(input.parse()?, input.parse()?, input.parse()?))
         } else if look.peek(kw::call) {
             // PROCEDURE CALL TYPE
-            input.parse::<kw::call>().unwrap();
-            input.parse::<Token![:]>()?;
-            input.parse::<Type>().map(Self::Call)
+            Ok(Self::Call(input.parse()?, input.parse()?, input.parse()?))
         } else {
             Err(look.error())
         }
@@ -112,23 +93,21 @@ impl Parse for CommandRead {
 
 pub enum CommandByteCount {
     // UNDEFINED / RESERVED
-    Undefined,
+    Undefined(Token![_]),
     // UNIMPLEMENTED / MANUFACTURER
-    Unimplemented,
+    Unimplemented(Token![!]),
     // KNOWN QUANTITY
     Count(Span, u8),
 }
 
 impl Parse for CommandByteCount {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        // TODO: More worries about error handling after using lookahead fork.
+        // TODO: Not taking advantage of `Lookahead1`'s error helper.
         let look = input.lookahead1();
         if look.peek(Token![_]) {
-            input.parse::<Token![_]>().unwrap();
-            Ok(Self::Undefined)
+            input.parse().map(CommandByteCount::Undefined)
         } else if look.peek(Token![!]) {
-            input.parse::<Token![!]>().unwrap();
-            Ok(Self::Unimplemented)
+            input.parse().map(CommandByteCount::Unimplemented)
         } else {
             input
                 .parse::<LitInt>()
