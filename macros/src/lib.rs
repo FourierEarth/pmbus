@@ -32,6 +32,7 @@ pub fn impl_commands(input: TokenStream1) -> TokenStream1 {
         .filter_map(|entry| WriteCommandFn::from_table_entry(entry).map(|write| write.0));
 
     let trait_tokens = quote! {
+        #[::async_trait::async_trait(?Send)]
         pub trait PmBus<A: ::embedded_hal::i2c::AddressMode = ::embedded_hal::i2c::SevenBitAddress>: SmBus<A> {
             #(#write_command_fns)*
         }
