@@ -7,6 +7,7 @@ use self::pmbus::CommandsTable;
 #[proc_macro]
 pub fn impl_commands(input: TokenStream1) -> TokenStream1 {
     let table: CommandsTable = parse_macro_input!(input);
+    dbg!(table);
     quote! {
         #[derive(Copy, Clone, PartialEq, Eq, Debug)]
         pub enum Command {
@@ -16,7 +17,10 @@ pub fn impl_commands(input: TokenStream1) -> TokenStream1 {
 }
 
 mod pmbus {
+    use std::fmt::Debug;
+
     use proc_macro2::Span;
+    use quote::ToTokens;
     use syn::parse::Parse;
     use syn::punctuated::Punctuated;
     use syn::{Ident, LitInt, Token, Type};
@@ -29,6 +33,7 @@ mod pmbus {
     }
 
     // TODO: Preserve tokens/spans?
+    #[derive(Debug)]
     pub enum CommandIdent {
         // UNDEFINED / RESERVED∏
         Undefined,
@@ -91,6 +96,17 @@ mod pmbus {
         }
     }
 
+    impl Debug for CommandWrite {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                CommandWrite::Undefined => write!(f, "UNDEFINED"),
+                CommandWrite::Unimplemented => write!(f, "UNIMPLEMENTED"),
+                CommandWrite::Write(ty) => write!(f, "{}", ty.to_token_stream()),
+                CommandWrite::Send => write!(f, "SEND"),
+            }
+        }
+    }
+
     // TODO: Preserve tokens/spans?
     pub enum CommandRead {
         // UNDEFINED / RESERVED
@@ -130,6 +146,18 @@ mod pmbus {
         }
     }
 
+    impl Debug for CommandRead {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::Undefined => write!(f, "UNDEFINED"),
+                Self::Unimplemented => write!(f, "UNIMPLEMENTED"),
+                Self::Read(ty) => write!(f, "{}", ty.into_token_stream()),
+                Self::Call(ty) => write!(f, "{}", ty.into_token_stream()),
+            }
+        }
+    }
+
+    #[derive(Debug)]
     pub enum CommandByteCount {
         // UNDEFINED / RESERVED
         Undefined,
@@ -157,6 +185,7 @@ mod pmbus {
         }
     }
 
+    #[derive(Debug)]
     pub struct CommandEntry {
         pub byte: (Span, u8),
         pub ident: CommandIdent,
@@ -185,12 +214,20 @@ mod pmbus {
             })
         }
     }
-
     pub struct CommandsTable(pub Punctuated<CommandEntry, Token![,]>);
 
     impl Parse for CommandsTable {
         fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
             Punctuated::parse_terminated(input).map(Self)
+        }
+    }
+
+    impl Debug for CommandsTable {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            for entry in self.0.iter() {
+                writeln!(f, "{:?}", entry)?;
+            }
+            Ok(())
         }
     }
 }
