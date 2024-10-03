@@ -77,17 +77,35 @@ pub trait SmBus<A: AddressMode = SevenBitAddress>: I2c<A> {
     }
 
     /// 6.5.6, Pg. 41
-    async fn process_call(&mut self, address: A, command: u8, word: u16) -> Result<u16, Self::Error> {
+    async fn process_call(
+        &mut self,
+        address: A,
+        command: u8,
+        word: u16,
+    ) -> Result<u16, Self::Error> {
         let word = word.to_le_bytes();
         let mut buf = [0x00, 0x00];
-        self.write_read(address, &[command, word[0], word[1]], &mut buf).await?;
+        self.write_read(address, &[command, word[0], word[1]], &mut buf)
+            .await?;
         Ok(u16::from_le_bytes(buf))
     }
 
     /// 6.5.7, Pg. 42
-    async fn block_write(&mut self, address: A, command: u8, block: &[u8]) -> Result<(), Self::Error> {
+    async fn block_write(
+        &mut self,
+        address: A,
+        command: u8,
+        block: &[u8],
+    ) -> Result<(), Self::Error> {
         assert!(block.len() <= SMBUS_MAX_BLOCK_SIZE);
-        self.transaction(address, &mut [Operation::Write(&[command, block.len() as u8]), Operation::Write(block)]).await
+        self.transaction(
+            address,
+            &mut [
+                Operation::Write(&[command, block.len() as u8]),
+                Operation::Write(block),
+            ],
+        )
+        .await
     }
 
     /// 6.5.7, Pg. 42
@@ -104,10 +122,23 @@ pub trait SmBus<A: AddressMode = SevenBitAddress>: I2c<A> {
     }
 
     /// 6.5.8, Pg. 43-44
-    async fn block_process_call(&mut self, address: A, command: u8, write_block: &[u8]) -> Result<Vec<u8>, Self::Error> {
+    async fn block_process_call(
+        &mut self,
+        address: A,
+        command: u8,
+        write_block: &[u8],
+    ) -> Result<Vec<u8>, Self::Error> {
         assert!(write_block.len() <= SMBUS_MAX_BLOCK_SIZE);
         let mut buf = Vec::with_capacity(SMBUS_MAX_BLOCK_SIZE + 1);
-        self.transaction(address, &mut [Operation::Write(&[command, write_block.len() as u8]), Operation::Write(write_block), Operation::Read(&mut buf)]).await?;
+        self.transaction(
+            address,
+            &mut [
+                Operation::Write(&[command, write_block.len() as u8]),
+                Operation::Write(write_block),
+                Operation::Read(&mut buf),
+            ],
+        )
+        .await?;
         let (len, block) = (buf[0] as usize, &buf[1..]);
         assert!(block.len() == std::cmp::min(len, SMBUS_MAX_BLOCK_SIZE));
         Ok(block.to_vec())
