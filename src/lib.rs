@@ -1,2 +1,2 @@
 pub mod commands;
-mod smbus;
+pub mod smbus;

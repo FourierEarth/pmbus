@@ -1,3 +1,7 @@
+// TODO: Improve macro hygiene. It doesn't like using `::pmbus::smbus::SmBus`,
+// which would be preferred over generating `crate` type-paths from the macro.
+use crate::smbus::SmBus;
+
 // This table follows the same order as Appendix I. Command Summary, Table 31, sequential byte order.
 //
 // <https://pmbusprod.wpenginepowered.com/wp-content/uploads/2022/01/PMBus-Specification-Rev-1-3-1-Part-II-20150313.pdf>

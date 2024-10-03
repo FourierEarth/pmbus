@@ -14,5 +14,6 @@ edition.workspace = true
 [dependencies]
 pmbus_macros = { path = "./macros" }
 embedded-hal-async = "1.0.0"
+embedded-hal = "1.0.0"
 
 # [workspace.dependencies]
