@@ -1,7 +1,18 @@
-[package]
-name = "pmbus"
+[workspace]
+members = ["macros"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 
+[package]
+name = "pmbus"
+version.workspace = true
+edition.workspace = true
+
 [dependencies]
+pmbus_macros = { path = "./macros" }
 embedded-hal-async = "1.0.0"
+
+# [workspace.dependencies]
