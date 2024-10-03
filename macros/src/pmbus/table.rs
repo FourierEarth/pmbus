@@ -1,6 +1,8 @@
 use proc_macro2::Span;
+use quote::{quote, quote_spanned, ToTokens};
 use syn::parse::Parse;
 use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
 use syn::{Ident, LitInt, Token, Type};
 
 mod kw {
@@ -23,6 +25,15 @@ impl Parse for CommandIdent {
             input.parse().map(Self::Undefined)
         } else {
             input.parse().map(Self::Verbatim)
+        }
+    }
+}
+
+impl ToTokens for CommandIdent {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            Self::Undefined(underscore) => underscore.to_tokens(tokens),
+            Self::Verbatim(ident) => ident.to_tokens(tokens),
         }
     }
 }
@@ -59,6 +70,17 @@ impl Parse for CommandWrite {
     }
 }
 
+impl ToTokens for CommandWrite {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            Self::Undefined(underscore) => underscore.to_tokens(tokens),
+            Self::Unimplemented(never) => never.to_tokens(tokens),
+            Self::Write(write, colon, ty) => quote!(#write #colon #ty).to_tokens(tokens),
+            Self::Send(send) => send.to_tokens(tokens),
+        }
+    }
+}
+
 pub enum CommandRead {
     // UNDEFINED / RESERVED
     Undefined(Token![_]),
@@ -68,6 +90,17 @@ pub enum CommandRead {
     Read(kw::read, Token![:], Type),
     // PROCEDURE CALL TYPE
     Call(kw::call, Token![:], Type),
+}
+
+impl ToTokens for CommandRead {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            CommandRead::Undefined(underscore) => underscore.to_tokens(tokens),
+            CommandRead::Unimplemented(never) => never.to_tokens(tokens),
+            CommandRead::Read(read, colon, ty) => quote!(#read #colon #ty).to_tokens(tokens),
+            CommandRead::Call(call, colon, ty) => quote!(#call #colon #ty).to_tokens(tokens),
+        }
+    }
 }
 
 impl Parse for CommandRead {
@@ -116,7 +149,18 @@ impl Parse for CommandByteCount {
     }
 }
 
+impl ToTokens for CommandByteCount {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            Self::Undefined(underscore) => underscore.to_tokens(tokens),
+            Self::Unimplemented(never) => never.to_tokens(tokens),
+            Self::Count(span, byte_count) => quote_spanned!(*span => #byte_count).to_tokens(tokens),
+        }
+    }
+}
+
 pub struct CommandEntry {
+    pub span: Span,
     pub byte: (Span, u8),
     pub ident: CommandIdent,
     pub write_kind: CommandWrite,
@@ -126,16 +170,29 @@ pub struct CommandEntry {
 
 impl Parse for CommandEntry {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let byte = input.parse::<Token![|]>().and_then(|_| {
+        // // Record the position at the start of the first `|`.
+        // let span = input.span();
+        let left_pipe = input.parse::<Token![|]>()?;
+
+        let byte = {
             let lit = input.parse::<LitInt>()?;
-            Ok((lit.span(), lit.base10_parse()?))
-        })?;
+            (lit.span(), lit.base10_parse()?)
+        };
         let ident = input.parse::<Token![|]>().and_then(|_| input.parse())?;
         let write_kind = input.parse::<Token![|]>().and_then(|_| input.parse())?;
         let read_kind = input.parse::<Token![|]>().and_then(|_| input.parse())?;
         let byte_count = input.parse::<Token![|]>().and_then(|_| input.parse())?;
-        let _ = input.parse::<Token![|]>()?;
+
+        // TODO: Works on nightly only.
+        // // The start and end tokens will never be from different files.
+        // let span = span.join(input.parse::<Token![|]>()?.span()).unwrap();
+        let right_pipe = input.parse::<Token![|]>()?;
+
+        // Lossy.
+        let span = quote!(#left_pipe #right_pipe).span();
+
         Ok(Self {
+            span,
             byte,
             ident,
             write_kind,
@@ -144,10 +201,37 @@ impl Parse for CommandEntry {
         })
     }
 }
+
+impl ToTokens for CommandEntry {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let Self {
+            span,
+            byte,
+            ident,
+            write_kind,
+            read_kind,
+            byte_count,
+        } = self;
+        let byte = byte.1;
+
+        quote_spanned! {
+            *span =>
+            | #byte | #ident | #write_kind | #read_kind | #byte_count |
+        }
+        .to_tokens(tokens)
+    }
+}
+
 pub struct CommandsTable(pub Punctuated<CommandEntry, Token![,]>);
 
 impl Parse for CommandsTable {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         Punctuated::parse_terminated(input).map(Self)
+    }
+}
+
+impl ToTokens for CommandsTable {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        self.0.to_tokens(tokens)
     }
 }

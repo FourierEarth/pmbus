@@ -8,6 +8,7 @@ pub struct WriteCommandFn(pub ItemFn);
 impl WriteCommandFn {
     pub fn from_table_entry(entry: &CommandEntry) -> Option<Self> {
         let CommandEntry {
+            span: _,
             byte: _,
             ident,
             write_kind,
