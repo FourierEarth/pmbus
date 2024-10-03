@@ -130,6 +130,7 @@ pub enum CommandByteCount {
     // UNIMPLEMENTED / MANUFACTURER
     Unimplemented(Token![!]),
     // KNOWN QUANTITY
+    // This number is parsed because it is used in pattern matches.
     Count(Span, u8),
 }
 
@@ -161,7 +162,7 @@ impl ToTokens for CommandByteCount {
 
 pub struct CommandEntry {
     pub span: Span,
-    pub byte: (Span, u8),
+    pub byte: LitInt,
     pub ident: CommandIdent,
     pub write_kind: CommandWrite,
     pub read_kind: CommandRead,
@@ -174,10 +175,7 @@ impl Parse for CommandEntry {
         // let span = input.span();
         let left_pipe = input.parse::<Token![|]>()?;
 
-        let byte = {
-            let lit = input.parse::<LitInt>()?;
-            (lit.span(), lit.base10_parse()?)
-        };
+        let byte = input.parse()?;
         let ident = input.parse::<Token![|]>().and_then(|_| input.parse())?;
         let write_kind = input.parse::<Token![|]>().and_then(|_| input.parse())?;
         let read_kind = input.parse::<Token![|]>().and_then(|_| input.parse())?;
@@ -212,7 +210,6 @@ impl ToTokens for CommandEntry {
             read_kind,
             byte_count,
         } = self;
-        let byte = byte.1;
 
         quote_spanned! {
             *span =>
