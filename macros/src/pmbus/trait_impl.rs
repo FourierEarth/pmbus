@@ -40,6 +40,36 @@ impl WriteCommandFn {
                     }
                 }))
             }
+            (
+                CommandIdent::Verbatim(command),
+                CommandWrite::Write(ty),
+                CommandByteCount::Count(_, 2),
+            ) => {
+                let write_fn_ident = create_fn_ident();
+                Some(Self(parse_quote! {
+                    async fn #write_fn_ident(&mut self, address: A, data: #ty) -> ::std::result::Result<(), <Self as ::embedded_hal::i2c::ErrorType>::Error> {
+                        <Self as SmBus<A>>::write_word(self, address, #command, data.into()).await
+                    }
+                }))
+            }
+            (
+                CommandIdent::Verbatim(command),
+                CommandWrite::Write(ty),
+                CommandByteCount::Count(_, _),
+            )
+            | (
+                CommandIdent::Verbatim(command),
+                CommandWrite::Write(ty),
+                CommandByteCount::Undefined,
+            ) => {
+                let write_fn_ident = create_fn_ident();
+                Some(Self(parse_quote! {
+                    async fn #write_fn_ident(&mut self, address: A, data: #ty) -> ::std::result::Result<(), <Self as ::embedded_hal::i2c::ErrorType>::Error> {
+                        <Self as SmBus<A>>::block_write(self, address, #command, data.into()).await
+                    }
+                }))
+            }
+
             // TODO: Make invalid definitions return errors.
             // (CommandIdent::Verbatim(_), CommandWrite::Send, _) => {
             //     todo!("error, send command can't have a byte count")
