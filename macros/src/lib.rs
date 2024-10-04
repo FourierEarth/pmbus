@@ -6,7 +6,7 @@ use quote::{quote, ToTokens};
 use syn::parse_macro_input;
 
 use self::pmbus::table::{CommandIdent, CommandsTable};
-use self::pmbus::trait_impl::WriteCommandFn;
+use self::pmbus::trait_impl::{ReadCommandFn, WriteCommandFn};
 
 #[proc_macro]
 pub fn impl_commands(input: TokenStream1) -> TokenStream1 {
@@ -26,15 +26,22 @@ pub fn impl_commands(input: TokenStream1) -> TokenStream1 {
         }
     }
 
+    // TODO: Stop mapping to the inner value. I'm leaving this alone for now because
+    // I expect it to change significantly once the structure of read and write data is better defined.
     let write_command_fns = table
         .0
         .iter()
         .filter_map(|entry| WriteCommandFn::from_table_entry(entry).map(|write| write.0));
+    let read_command_fns = table
+        .0
+        .iter()
+        .filter_map(|entry| ReadCommandFn::from_table_entry(entry).map(|write| write.0));
 
     let trait_tokens = quote! {
         #[::async_trait::async_trait(?Send)]
         pub trait PmBus<A: ::embedded_hal::i2c::AddressMode = ::embedded_hal::i2c::SevenBitAddress>: SmBus<A> {
             #(#write_command_fns)*
+            #(#read_command_fns)*
         }
     };
 

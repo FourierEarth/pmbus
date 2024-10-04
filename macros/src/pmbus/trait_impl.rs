@@ -3,7 +3,7 @@ use quote::{format_ident, ToTokens};
 use syn::spanned::Spanned;
 use syn::{parse_quote_spanned, Ident, ItemFn, Type};
 
-use super::table::{CommandByteCount, CommandEntry, CommandIdent, CommandWrite};
+use super::table::{CommandByteCount, CommandEntry, CommandIdent, CommandRead, CommandWrite};
 
 // TODO: This structure is mainly associated with logic,
 // which should probably be moved elsewhere (such as to a new-type wrapper around `ItemTrait`).
@@ -119,6 +119,125 @@ impl WriteCommandFn {
                 ..
             } => Some(Self(gen_send_fn(command))),
             // TODO: See comment TEST VALIDATION PATTERN.
+            _ => {
+                println!("{}", entry.to_token_stream());
+                unimplemented!("edge cases and invalid entries not yet handled")
+            }
+        }
+    }
+}
+
+pub struct ReadCommandFn(pub ItemFn);
+
+impl ReadCommandFn {
+    pub fn from_table_entry(entry: &CommandEntry) -> Option<Self> {
+        let gen_read_fn = |read_op: Ident, command: &Ident, ty: &Type| -> ItemFn {
+            let read_fn_ident = format_ident!(
+                "read_{base_ident}",
+                base_ident = Ident::new(&command.to_string().to_snake_case(), command.span())
+            );
+            parse_quote_spanned! {
+                entry.span() =>
+                async fn #read_fn_ident(&mut self, address: A) -> ::std::result::Result<#ty, <Self as ::embedded_hal::i2c::ErrorType>::Error> {
+                    <Self as SmBus<A>>::#read_op(self, address, #command).await.map(Into::into)
+                }
+            }
+        };
+
+        // Currently all process calls are treated as "Block Read - Block Write Process Call" operations.
+        // We will need to change this (or expand on it) as the write and return types become well-known.
+        // Currently type is ignored.
+        let gen_proc_call_fn = |command: &Ident, _ty: &Type| -> ItemFn {
+            let call_fn_ident = format_ident!(
+                "call_{base_ident}",
+                base_ident = Ident::new(&command.to_string().to_snake_case(), command.span())
+            );
+            // TODO: The return value is fixed as a byte-vector.
+            // Might be best to interpret the write type from another keyword in the write column.
+            parse_quote_spanned! {
+                entry.span() =>
+                async fn #call_fn_ident(&mut self, address: A, write_block: &[u8]) -> ::std::result::Result<Vec<u8>, <Self as ::embedded_hal::i2c::ErrorType>::Error> {
+                    <Self as SmBus<A>>::block_process_call(self, address, #command, write_block).await
+                }
+            }
+        };
+
+        match entry {
+            // Discard entries which do not have a read operation.
+            CommandEntry {
+                read_kind: CommandRead::Undefined(_),
+                ..
+            }
+            | CommandEntry {
+                read_kind: CommandRead::Unimplemented(_),
+                ..
+            } => None,
+            // Data length is one byte, the operation is `read_byte`.
+            CommandEntry {
+                ident: CommandIdent::Verbatim(command),
+                read_kind: CommandRead::Read(_, _, ty),
+                byte_count: CommandByteCount::Count(byte_count_span, 1),
+                ..
+            } => Some(Self(gen_read_fn(
+                Ident::new("read_byte", *byte_count_span),
+                command,
+                ty,
+            ))),
+            // Data length is one byte, the operation is `read_word`.
+            CommandEntry {
+                ident: CommandIdent::Verbatim(command),
+                read_kind: CommandRead::Read(_, _, ty),
+                byte_count: CommandByteCount::Count(byte_count_span, 2),
+                ..
+            } => Some(Self(gen_read_fn(
+                Ident::new("read_word", *byte_count_span),
+                command,
+                ty,
+            ))),
+            // The data size is known, but it is not a byte or a word.
+            // The operation is `block_write`.
+            CommandEntry {
+                ident: CommandIdent::Verbatim(command),
+                read_kind: CommandRead::Read(_, _, ty),
+                byte_count: CommandByteCount::Count(byte_count_span, _),
+                ..
+            } => Some(Self(gen_read_fn(
+                Ident::new("block_read", *byte_count_span),
+                command,
+                ty,
+            ))),
+            // Write kind is known, but data length undefined. This means we treat the data as a variable-sized block.
+            // The operation is `block_write`.
+            CommandEntry {
+                ident: CommandIdent::Verbatim(command),
+                read_kind: CommandRead::Read(_, _, ty),
+                byte_count: CommandByteCount::Undefined(underscore),
+                ..
+            } => Some(Self(gen_read_fn(
+                Ident::new("block_read", underscore.span()),
+                command,
+                ty,
+            ))),
+            // Process calls have many variations that need to be accounted for.
+            // For example, the write data could be two bytes and the data read back is variable, or a fixed size.
+            // The current `SmBus` trait just treats all process calls the same, as block-write and block-read.
+            // More data can be added to the commands table to indicate the types in either direction.
+            // Coercion does not work for these commands at the moment. Byte count is ignored, but refers to the size of the data read back.
+            CommandEntry {
+                ident: CommandIdent::Verbatim(command),
+                read_kind: CommandRead::Call(_, _, ty),
+                byte_count: CommandByteCount::Count(_byte_count_span, _),
+                ..
+            } => Some(Self(gen_proc_call_fn(command, ty))),
+            // TODO: This is no different from the above, for now.
+            // I expect this to be removed later as very few commands are actually variable sized.
+            CommandEntry {
+                ident: CommandIdent::Verbatim(command),
+                read_kind: CommandRead::Call(_, _, ty),
+                byte_count: CommandByteCount::Undefined(_),
+                ..
+            } => Some(Self(gen_proc_call_fn(command, ty))),
+            // TODO: See comment TEST VALIDATION PATTERN (in `ReadCommandFn`).
             _ => {
                 println!("{}", entry.to_token_stream());
                 unimplemented!("edge cases and invalid entries not yet handled")
