@@ -1,9 +1,36 @@
 use heck::ToSnakeCase;
 use quote::{format_ident, ToTokens};
 use syn::spanned::Spanned;
-use syn::{parse_quote_spanned, Ident, ItemFn, Type};
+use syn::{parse_quote, parse_quote_spanned, Ident, ItemFn, ItemTrait, Type};
 
-use super::table::{CommandByteCount, CommandEntry, CommandIdent, CommandRead, CommandWrite};
+use super::table::{
+    CommandByteCount, CommandEntry, CommandIdent, CommandRead, CommandWrite, CommandsTable,
+};
+
+pub struct PmBusTraitItem(pub ItemTrait);
+
+impl From<CommandsTable> for PmBusTraitItem {
+    fn from(table: CommandsTable) -> Self {
+        // TODO: Stop mapping to the inner value. I'm leaving this alone for now because
+        // I expect it to change significantly once the structure of read and write data is better defined.
+        let write_command_fns = table
+            .0
+            .iter()
+            .filter_map(|entry| WriteCommandFn::from_table_entry(entry).map(|write| write.0));
+        let read_command_fns = table
+            .0
+            .iter()
+            .filter_map(|entry| ReadCommandFn::from_table_entry(entry).map(|write| write.0));
+
+        Self(parse_quote! {
+            #[::async_trait::async_trait(?Send)]
+            pub trait PmBus<A: ::embedded_hal::i2c::AddressMode = ::embedded_hal::i2c::SevenBitAddress>: SmBus<A> {
+                #(#write_command_fns)*
+                #(#read_command_fns)*
+            }
+        })
+    }
+}
 
 // TODO: This structure is mainly associated with logic,
 // which should probably be moved elsewhere (such as to a new-type wrapper around `ItemTrait`).
